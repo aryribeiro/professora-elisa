@@ -317,48 +317,52 @@ html_code = """
 # Inicializar session state
 if 'messages' not in st.session_state:
     st.session_state.messages = []
+if 'audio_to_play' not in st.session_state:
+    st.session_state.audio_to_play = None
 
 # Processar nova mensagem
 user_input = components.html(html_code, height=600)
 
-if user_input and user_input not in [msg.get('input') for msg in st.session_state.messages]:
-    try:
-        # Gerar resposta
-        response = bedrock.converse(
-            modelId='amazon.nova-pro-v1:0',
-            messages=[{"role": "user", "content": [{"text": user_input}]}],
-            system=[{"text": SYSTEM_PROMPT}],
-            inferenceConfig={"temperature": 0.8, "topP": 0.9, "maxTokens": 100}
-        )
-        
-        response_text = response['output']['message']['content'][0]['text']
-        
-        # Converter para áudio
-        polly_response = polly.synthesize_speech(
-            Text=response_text,
-            OutputFormat='mp3',
-            VoiceId='Camila',
-            Engine='neural'
-        )
-        
-        audio_bytes = polly_response['AudioStream'].read()
-        audio_b64 = base64.b64encode(audio_bytes).decode()
-        
-        # Salvar mensagem
-        st.session_state.messages.append({
-            'input': user_input,
-            'audio': audio_b64
-        })
-        
-        # Reproduzir áudio
-        st.markdown(f"""
-        <audio autoplay style="display:none">
-            <source src="data:audio/mp3;base64,{audio_b64}" type="audio/mp3">
-        </audio>
-        """, unsafe_allow_html=True)
-        
-    except Exception as e:
-        st.error(f"Erro: {str(e)}")
+if user_input and isinstance(user_input, str) and len(user_input.strip()) > 0:
+    if user_input not in [msg.get('input') for msg in st.session_state.messages]:
+        try:
+            # Gerar resposta
+            response = bedrock.converse(
+                modelId='amazon.nova-pro-v1:0',
+                messages=[{"role": "user", "content": [{"text": user_input.strip()}]}],
+                system=[{"text": SYSTEM_PROMPT}],
+                inferenceConfig={"temperature": 0.8, "topP": 0.9, "maxTokens": 100}
+            )
+            
+            response_text = response['output']['message']['content'][0]['text']
+            
+            # Converter para áudio
+            polly_response = polly.synthesize_speech(
+                Text=response_text,
+                OutputFormat='mp3',
+                VoiceId='Camila',
+                Engine='neural'
+            )
+            
+            audio_bytes = polly_response['AudioStream'].read()
+            audio_b64 = base64.b64encode(audio_bytes).decode()
+            
+            # Salvar mensagem
+            st.session_state.messages.append({'input': user_input})
+            st.session_state.audio_to_play = audio_b64
+            st.rerun()
+            
+        except Exception as e:
+            st.error(f"Erro: {str(e)}")
+
+# Reproduzir áudio se existir
+if st.session_state.audio_to_play:
+    st.markdown(f"""
+    <audio autoplay style="display:none">
+        <source src="data:audio/mp3;base64,{st.session_state.audio_to_play}" type="audio/mp3">
+    </audio>
+    """, unsafe_allow_html=True)
+    st.session_state.audio_to_play = None
 
 # Footer
 st.markdown("---")
