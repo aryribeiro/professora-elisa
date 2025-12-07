@@ -25,7 +25,7 @@ def start_backend():
 
 start_backend()
 
-st.set_page_config(page_title="Professor ChatBot! 🎓", page_icon="🎓", layout="centered")
+st.set_page_config(page_title="Professora Elisa!", page_icon="🙋🏼‍♀️", layout="centered")
 
 st.markdown("""
 <style>
@@ -40,7 +40,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown('<div class="main-header"><h1>🎓 Professor ChatBot!</h1><p>Conversa em Tempo Real - Speech-to-Speech</p></div>', unsafe_allow_html=True)
+st.markdown('<div class="main-header"><h1>🙋🏼‍♀️ Professora Elisa!</h1><p>Conversa em Tempo Real - Speech-to-Speech</p></div>', unsafe_allow_html=True)
 
 html_code = """
 <!DOCTYPE html>
@@ -249,7 +249,7 @@ html_code = """
             
             button.className = 'speaking';
             button.innerHTML = '🔊';
-            status.textContent = '🔊 Professor falando...';
+            status.textContent = '🔊 Professora falando...';
             
             const audioBlob = new Blob([audioData], { type: 'audio/mpeg' });
             const audioUrl = URL.createObjectURL(audioBlob);
@@ -274,3 +274,45 @@ html_code = """
 """
 
 components.html(html_code, height=600)
+
+# Footer
+st.markdown("---")
+st.markdown("""
+<div style="text-align: center; color: #666; padding: 20px;">
+    <strong>🙋🏼‍♀️ Professora Elisa!</strong> - Desenvolvido para interação em tempo real<br>
+    Criado por <strong>Ary Ribeiro</strong>: <a href="mailto:aryribeiro@gmail.com">aryribeiro@gmail.com</a><br>
+    <small>Versão 1.0 | Streamlit + Python</small>
+</div>
+""", unsafe_allow_html=True)
+
+st.markdown("""
+<style>
+    .main {
+        background-color: #ffffff;
+        color: #333333;
+    }
+    .block-container {
+        padding-top: 1rem;
+        padding-bottom: 0rem;
+    }
+    /* Esconde completamente todos os elementos da barra padrão do Streamlit */
+    header {display: none !important;}
+    footer {display: none !important;}
+    #MainMenu {display: none !important;}
+    /* Remove qualquer espaço em branco adicional */
+    div[data-testid="stAppViewBlockContainer"] {
+        padding-top: 0 !important;
+        padding-bottom: 0 !important;
+    }
+    div[data-testid="stVerticalBlock"] {
+        gap: 0 !important;
+        padding-top: 0 !important;
+        padding-bottom: 0 !important;
+    }
+    /* Remove quaisquer margens extras */
+    .element-container {
+        margin-top: 0 !important;
+        margin-bottom: 0 !important;
+    }
+</style>
+""", unsafe_allow_html=True)

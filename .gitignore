@@ -1,6 +1,7 @@
 # Environment variables
 .env
-
+backend_old.py
+app_old.py
 # Python
 __pycache__/
 *.py[cod]

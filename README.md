@@ -1,4 +1,4 @@
-# 🎓 Professora Polly - Speech-to-Speech English Learning Assistant
+# 🎓 Professora Elisa! - Speech-to-Speech English Learning Assistant
 
 Assistente de conversação em tempo real para aprendizado de inglês, usando reconhecimento de voz, IA generativa (Amazon Bedrock Nova Pro) e síntese de voz (Amazon Polly).
 
@@ -31,7 +31,7 @@ Assistente de conversação em tempo real para aprendizado de inglês, usando re
 1. **Clone o repositório**
 ```bash
 git clone <seu-repositorio>
-cd professora-polly
+cd professora-elisa
 ```
 
 2. **Instale as dependências**
@@ -65,7 +65,7 @@ O backend será iniciado automaticamente na porta 8001.
 ## 📁 Estrutura do Projeto
 
 ```
-professora-polly/
+professora-elisa/
 ├── app.py              # Frontend Streamlit
 ├── backend.py          # Backend FastAPI com WebSocket
 ├── requirements.txt    # Dependências Python
