@@ -8,19 +8,24 @@ import base64
 load_dotenv()
 
 # Configurar AWS
-bedrock = boto3.client(
-    service_name='bedrock-runtime',
-    region_name='us-east-1',
-    aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
-    aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY')
-)
+@st.cache_resource
+def get_clients():
+    bedrock = boto3.client(
+        service_name='bedrock-runtime',
+        region_name='us-east-1',
+        aws_access_key_id=st.secrets.get('AWS_ACCESS_KEY_ID', os.getenv('AWS_ACCESS_KEY_ID')),
+        aws_secret_access_key=st.secrets.get('AWS_SECRET_ACCESS_KEY', os.getenv('AWS_SECRET_ACCESS_KEY'))
+    )
+    
+    polly = boto3.client(
+        service_name='polly',
+        region_name='us-east-1',
+        aws_access_key_id=st.secrets.get('AWS_ACCESS_KEY_ID', os.getenv('AWS_ACCESS_KEY_ID')),
+        aws_secret_access_key=st.secrets.get('AWS_SECRET_ACCESS_KEY', os.getenv('AWS_SECRET_ACCESS_KEY'))
+    )
+    return bedrock, polly
 
-polly = boto3.client(
-    service_name='polly',
-    region_name='us-east-1',
-    aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
-    aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY')
-)
+bedrock, polly = get_clients()
 
 SYSTEM_PROMPT = """You are having a ONE-ON-ONE conversation with a single Brazilian adult learning English. Speak directly to THEM (not "pessoal" or "vocês"). 
 
@@ -56,11 +61,6 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown('<div class="main-header"><h1>🎓 Professora Polly!</h1><p>Conversa em Tempo Real - Speech-to-Speech</p></div>', unsafe_allow_html=True)
-
-# Debug info (remover depois)
-if st.checkbox('Debug', value=False):
-    st.write('AWS Key configurada:', bool(os.getenv('AWS_ACCESS_KEY_ID')))
-    st.write('AWS Secret configurada:', bool(os.getenv('AWS_SECRET_ACCESS_KEY')))
 
 html_code = """
 <!DOCTYPE html>
@@ -314,45 +314,51 @@ html_code = """
 </html>
 """
 
-# Receber input do componente
+# Inicializar session state
+if 'messages' not in st.session_state:
+    st.session_state.messages = []
+
+# Processar nova mensagem
 user_input = components.html(html_code, height=600)
 
-# Processar input do usuário
-if user_input and isinstance(user_input, str) and len(user_input.strip()) > 0:
-    with st.spinner('Gerando resposta...'):
-        try:
-            # Gerar resposta com Bedrock
-            response = bedrock.converse(
-                modelId='amazon.nova-pro-v1:0',
-                messages=[{"role": "user", "content": [{"text": user_input.strip()}]}],
-                system=[{"text": SYSTEM_PROMPT}],
-                inferenceConfig={"temperature": 0.8, "topP": 0.9, "maxTokens": 100}
-            )
-            
-            response_text = response['output']['message']['content'][0]['text']
-            
-            # Converter para áudio com Polly
-            polly_response = polly.synthesize_speech(
-                Text=response_text,
-                OutputFormat='mp3',
-                VoiceId='Camila',
-                Engine='neural'
-            )
-            
-            audio_bytes = polly_response['AudioStream'].read()
-            audio_b64 = base64.b64encode(audio_bytes).decode()
-            
-            # Enviar áudio de volta para o componente
-            components.html(f"""
-            <script>
-                const iframe = window.parent.document.querySelector('iframe[title="components.html"]');
-                if (iframe && iframe.contentWindow) {{
-                    iframe.contentWindow.postMessage({{type: 'playAudio', audio: '{audio_b64}'}}, '*');
-                }}
-            </script>
-            """, height=0)
-        except Exception as e:
-            st.error(f"Erro ao processar: {str(e)}")
+if user_input and user_input not in [msg.get('input') for msg in st.session_state.messages]:
+    try:
+        # Gerar resposta
+        response = bedrock.converse(
+            modelId='amazon.nova-pro-v1:0',
+            messages=[{"role": "user", "content": [{"text": user_input}]}],
+            system=[{"text": SYSTEM_PROMPT}],
+            inferenceConfig={"temperature": 0.8, "topP": 0.9, "maxTokens": 100}
+        )
+        
+        response_text = response['output']['message']['content'][0]['text']
+        
+        # Converter para áudio
+        polly_response = polly.synthesize_speech(
+            Text=response_text,
+            OutputFormat='mp3',
+            VoiceId='Camila',
+            Engine='neural'
+        )
+        
+        audio_bytes = polly_response['AudioStream'].read()
+        audio_b64 = base64.b64encode(audio_bytes).decode()
+        
+        # Salvar mensagem
+        st.session_state.messages.append({
+            'input': user_input,
+            'audio': audio_b64
+        })
+        
+        # Reproduzir áudio
+        st.markdown(f"""
+        <audio autoplay style="display:none">
+            <source src="data:audio/mp3;base64,{audio_b64}" type="audio/mp3">
+        </audio>
+        """, unsafe_allow_html=True)
+        
+    except Exception as e:
+        st.error(f"Erro: {str(e)}")
 
 # Footer
 st.markdown("---")
