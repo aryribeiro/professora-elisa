@@ -12,7 +12,7 @@ def start_backend():
     
     # Verificar se backend já está rodando
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    result = sock.connect_ex(('localhost', 8001))
+    result = sock.connect_ex(('https://ingles.streamlit.app/', 8001))
     sock.close()
     
     if result == 0:
@@ -132,7 +132,7 @@ html_code = """
         
         async function connect() {
             try {
-                ws = new WebSocket('ws://localhost:8001/ws');
+                ws = new WebSocket('ws://ingles.streamlit.app:8001/ws');
                 
                 ws.onopen = async () => {
                     console.log('WebSocket conectado');
