@@ -57,6 +57,11 @@ st.markdown("""
 
 st.markdown('<div class="main-header"><h1>🎓 Professora Polly!</h1><p>Conversa em Tempo Real - Speech-to-Speech</p></div>', unsafe_allow_html=True)
 
+# Debug info (remover depois)
+if st.checkbox('Debug', value=False):
+    st.write('AWS Key configurada:', bool(os.getenv('AWS_ACCESS_KEY_ID')))
+    st.write('AWS Secret configurada:', bool(os.getenv('AWS_SECRET_ACCESS_KEY')))
+
 html_code = """
 <!DOCTYPE html>
 <html>
@@ -313,38 +318,41 @@ html_code = """
 user_input = components.html(html_code, height=600)
 
 # Processar input do usuário
-if user_input:
+if user_input and isinstance(user_input, str) and len(user_input.strip()) > 0:
     with st.spinner('Gerando resposta...'):
-        # Gerar resposta com Bedrock
-        response = bedrock.converse(
-            modelId='amazon.nova-pro-v1:0',
-            messages=[{"role": "user", "content": [{"text": user_input}]}],
-            system=[{"text": SYSTEM_PROMPT}],
-            inferenceConfig={"temperature": 0.8, "topP": 0.9, "maxTokens": 100}
-        )
-        
-        response_text = response['output']['message']['content'][0]['text']
-        
-        # Converter para áudio com Polly
-        polly_response = polly.synthesize_speech(
-            Text=response_text,
-            OutputFormat='mp3',
-            VoiceId='Camila',
-            Engine='neural'
-        )
-        
-        audio_bytes = polly_response['AudioStream'].read()
-        audio_b64 = base64.b64encode(audio_bytes).decode()
-        
-        # Enviar áudio de volta para o componente
-        components.html(f"""
-        <script>
-            const iframe = window.parent.document.querySelector('iframe[title="components.html"]');
-            if (iframe && iframe.contentWindow) {{
-                iframe.contentWindow.postMessage({{type: 'playAudio', audio: '{audio_b64}'}}, '*');
-            }}
-        </script>
-        """, height=0)
+        try:
+            # Gerar resposta com Bedrock
+            response = bedrock.converse(
+                modelId='amazon.nova-pro-v1:0',
+                messages=[{"role": "user", "content": [{"text": user_input.strip()}]}],
+                system=[{"text": SYSTEM_PROMPT}],
+                inferenceConfig={"temperature": 0.8, "topP": 0.9, "maxTokens": 100}
+            )
+            
+            response_text = response['output']['message']['content'][0]['text']
+            
+            # Converter para áudio com Polly
+            polly_response = polly.synthesize_speech(
+                Text=response_text,
+                OutputFormat='mp3',
+                VoiceId='Camila',
+                Engine='neural'
+            )
+            
+            audio_bytes = polly_response['AudioStream'].read()
+            audio_b64 = base64.b64encode(audio_bytes).decode()
+            
+            # Enviar áudio de volta para o componente
+            components.html(f"""
+            <script>
+                const iframe = window.parent.document.querySelector('iframe[title="components.html"]');
+                if (iframe && iframe.contentWindow) {{
+                    iframe.contentWindow.postMessage({{type: 'playAudio', audio: '{audio_b64}'}}, '*');
+                }}
+            </script>
+            """, height=0)
+        except Exception as e:
+            st.error(f"Erro ao processar: {str(e)}")
 
 # Footer
 st.markdown("---")
