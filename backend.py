@@ -28,16 +28,12 @@ bedrock = boto3.client(
     aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY')
 )
 
-
-
 polly = boto3.client(
     service_name='polly',
     region_name='us-east-1',
     aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
     aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY')
 )
-
-
 
 SYSTEM_PROMPT = """You are having a ONE-ON-ONE conversation with a single Brazilian adult learning English. Speak directly to THEM (not "pessoal" or "vocês"). 
 
@@ -49,11 +45,6 @@ RULES:
 - Be warm and encouraging
 - NEVER give long lessons or lists
 - Focus on natural back-and-forth dialogue
-
-Example:
-"Oi! Como você está? How are you today?"
-"Legal! Let's practice. What's your name?"
-"Muito bem! Now tell me, do you like coffee?"
 
 Keep it conversational and brief!"""
 

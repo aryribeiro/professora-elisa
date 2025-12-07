@@ -1,74 +1,48 @@
 import streamlit as st
-import boto3
+import streamlit.components.v1 as components
+import subprocess
+import time
+import socket
+import sys
 import os
-from dotenv import load_dotenv
 
-load_dotenv()
-
-st.set_page_config(page_title="Professora Polly!", page_icon="🎓", layout="centered")
-
+# Iniciar backend automaticamente
 @st.cache_resource
-def get_clients():
-    bedrock = boto3.client(
-        service_name='bedrock-runtime',
-        region_name='us-east-1',
-        aws_access_key_id=st.secrets.get('AWS_ACCESS_KEY_ID', os.getenv('AWS_ACCESS_KEY_ID')),
-        aws_secret_access_key=st.secrets.get('AWS_SECRET_ACCESS_KEY', os.getenv('AWS_SECRET_ACCESS_KEY'))
-    )
-    polly = boto3.client(
-        service_name='polly',
-        region_name='us-east-1',
-        aws_access_key_id=st.secrets.get('AWS_ACCESS_KEY_ID', os.getenv('AWS_ACCESS_KEY_ID')),
-        aws_secret_access_key=st.secrets.get('AWS_SECRET_ACCESS_KEY', os.getenv('AWS_SECRET_ACCESS_KEY'))
-    )
-    return bedrock, polly
+def start_backend():
+    # Verificar se backend já está rodando
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    result = sock.connect_ex(('localhost', 8001))
+    sock.close()
+    
+    if result == 0:
+        return None  # Backend já está rodando
+    
+    # Iniciar backend
+    backend_path = os.path.join(os.path.dirname(__file__), "backend.py")
+    backend_process = subprocess.Popen([sys.executable, backend_path])
+    time.sleep(3)
+    return backend_process
 
-bedrock, polly = get_clients()
+start_backend()
 
-SYSTEM_PROMPT = """You are having a ONE-ON-ONE conversation with a single Brazilian adult learning English. Speak directly to THEM. Keep responses SHORT (2-3 sentences max). Mix Portuguese and English naturally. Be warm and encouraging."""
+st.set_page_config(page_title="Professor ChatBot! 🎓", page_icon="🎓", layout="centered")
 
-st.markdown('<div style="text-align: center;"><h1>🎓 Professora Polly!</h1><p>Aprendizado de Inglês com IA</p></div>', unsafe_allow_html=True)
+st.markdown("""
+<style>
+    .main-header {
+        text-align: center;
+        padding: 1rem;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 10px;
+        margin-bottom: 2rem;
+    }
+</style>
+""", unsafe_allow_html=True)
 
-if 'messages' not in st.session_state:
-    st.session_state.messages = []
+st.markdown('<div class="main-header"><h1>🎓 Professor ChatBot!</h1><p>Conversa em Tempo Real - Speech-to-Speech</p></div>', unsafe_allow_html=True)
 
-user_text = st.text_input("🎙️ Digite ou fale sua mensagem:", key="user_input", placeholder="Ex: Hello, how are you?")
-
-if st.button("🔊 Enviar e Ouvir", type="primary", use_container_width=True):
-    if user_text:
-        with st.spinner('🤔 Pensando...'):
-            response = bedrock.converse(
-                modelId='amazon.nova-pro-v1:0',
-                messages=[{"role": "user", "content": [{"text": user_text}]}],
-                system=[{"text": SYSTEM_PROMPT}],
-                inferenceConfig={"temperature": 0.8, "topP": 0.9, "maxTokens": 100}
-            )
-            
-            response_text = response['output']['message']['content'][0]['text']
-            
-            polly_response = polly.synthesize_speech(
-                Text=response_text,
-                OutputFormat='mp3',
-                VoiceId='Camila',
-                Engine='neural'
-            )
-            
-            audio_bytes = polly_response['AudioStream'].read()
-            
-            st.session_state.messages.append({'user': user_text, 'bot': response_text})
-            
-            st.success(f"🗣️ Você: {user_text}")
-            st.info(f"🎓 Professora: {response_text}")
-            st.audio(audio_bytes, format='audio/mp3')
-
-if st.session_state.messages:
-    with st.expander("📝 Histórico"):
-        for msg in st.session_state.messages[-5:]:
-            st.write(f"**Você:** {msg['user']}")
-            st.write(f"**Professora:** {msg['bot']}")
-            st.divider()
-
-html_code_hidden = """
+html_code = """
 <!DOCTYPE html>
 <html>
 <head>
@@ -138,8 +112,6 @@ html_code_hidden = """
     <script>
         let ws;
         let isConnected = false;
-        let mediaRecorder;
-        let stream;
         let currentAudio = null;
         
         const button = document.getElementById('connectButton');
@@ -155,13 +127,7 @@ html_code_hidden = """
         
         async function connect() {
             try {
-                // Sem WebSocket - usar Streamlit diretamente
-                isConnected = true;
-                button.className = 'connected';
-                button.innerHTML = '🔴';
-                status.textContent = '🎙️ Pressione ESPAÇO para falar';
-                await startAudioCapture();
-                return;
+                ws = new WebSocket('ws://localhost:8001/ws');
                 
                 ws.onopen = async () => {
                     console.log('WebSocket conectado');
@@ -201,12 +167,6 @@ html_code_hidden = """
         function disconnect() {
             if (ws) {
                 ws.close();
-            }
-            if (stream) {
-                stream.getTracks().forEach(track => track.stop());
-            }
-            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-                mediaRecorder.stop();
             }
             if (currentAudio) {
                 currentAudio.pause();
@@ -253,10 +213,11 @@ html_code_hidden = """
             recognition.onresult = (event) => {
                 const transcript = event.results[0][0].transcript;
                 console.log('Você disse:', transcript);
-                status.textContent = '⏳ Processando...';
                 
-                // Enviar para Streamlit
-                window.parent.postMessage({type: 'streamlit:setComponentValue', value: transcript}, '*');
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ text: transcript }));
+                    status.textContent = '⏳ Aguardando resposta...';
+                }
             };
             
             recognition.onend = () => {
@@ -278,14 +239,7 @@ html_code_hidden = """
             };
         }
         
-        // Receber áudio do Streamlit
-        window.addEventListener('message', (event) => {
-            if (event.data.type === 'playAudio') {
-                playAudio(event.data.audio);
-            }
-        });
-        
-        function playAudio(audioB64) {
+        function playAudio(audioData) {
             if (!isConnected) return;
             
             if (currentAudio) {
@@ -295,10 +249,9 @@ html_code_hidden = """
             
             button.className = 'speaking';
             button.innerHTML = '🔊';
-            status.textContent = '🔊 Professora falando...';
+            status.textContent = '🔊 Professor falando...';
             
-            const audioBytes = Uint8Array.from(atob(audioB64), c => c.charCodeAt(0));
-            const audioBlob = new Blob([audioBytes], { type: 'audio/mpeg' });
+            const audioBlob = new Blob([audioData], { type: 'audio/mpeg' });
             const audioUrl = URL.createObjectURL(audioBlob);
             currentAudio = new Audio(audioUrl);
             currentAudio.volume = 1.0;
@@ -320,5 +273,4 @@ html_code_hidden = """
 </html>
 """
 
-st.markdown("---")
-st.markdown('<div style="text-align: center; color: #666;"><strong>🎓 Professora Polly!</strong><br>por Ary Ribeiro</div>', unsafe_allow_html=True)
+components.html(html_code, height=600)
