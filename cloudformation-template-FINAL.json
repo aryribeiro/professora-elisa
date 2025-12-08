@@ -1,0 +1,197 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Professora Elisa - Lambda + API Gateway REST - TEMPLATE COMPLETO E TESTADO",
+  "Resources": {
+    "LambdaExecutionRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "RoleName": "ProfessoraElisaLambdaRole",
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "ManagedPolicyArns": [
+          "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+          "arn:aws:iam::aws:policy/AmazonBedrockFullAccess",
+          "arn:aws:iam::aws:policy/AmazonPollyFullAccess"
+        ]
+      }
+    },
+    "ProfessoraElisaFunction": {
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "FunctionName": "ProfessoraElisaFunction",
+        "Runtime": "python3.12",
+        "Handler": "index.lambda_handler",
+        "Role": {
+          "Fn::GetAtt": [
+            "LambdaExecutionRole",
+            "Arn"
+          ]
+        },
+        "Timeout": 30,
+        "MemorySize": 512,
+        "Code": {
+          "ZipFile": "import json\nimport boto3\nimport base64\nimport traceback\n\ndef lambda_handler(event, context):\n    cors_headers = {\n        'Content-Type': 'application/json',\n        'Access-Control-Allow-Origin': '*',\n        'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',\n        'Access-Control-Allow-Methods': 'POST,OPTIONS'\n    }\n    \n    print(f'Event: {json.dumps(event)}')\n    \n    if event.get('httpMethod') == 'OPTIONS':\n        return {'statusCode': 200, 'headers': cors_headers, 'body': ''}\n    \n    try:\n        print('Initializing AWS clients...')\n        bedrock_client = boto3.client('bedrock-runtime', region_name='us-east-1')\n        polly_client = boto3.client('polly', region_name='us-east-1')\n        print('Clients initialized successfully')\n        \n        body = json.loads(event.get('body', '{}'))\n        user_text = body.get('text', '')\n        print(f'User text: {user_text}')\n        \n        if not user_text:\n            return {'statusCode': 400, 'headers': cors_headers, 'body': json.dumps({'error': 'No text provided'})}\n        \n        print('Calling Bedrock...')\n        system_prompt = '''Your name is Elisa. You are having a ONE-ON-ONE conversation with a single Brazilian adult learning English. Speak directly to THEM (not \"pessoal\" or \"vocês\"). \n\nRULES:\n- Keep responses SHORT (1-2 sentences max)\n- Speak naturally like talking to ONE friend\n- Mix Portuguese and English naturally\n- Ask simple questions to keep conversation flowing\n- Be warm and encouraging\n- NEVER give long lessons or lists\n- Focus on natural back-and-forth dialogue\n\nKeep it conversational and brief!'''\n        \n        bedrock_response = bedrock_client.converse(\n            modelId='amazon.nova-pro-v1:0',\n            messages=[{'role': 'user', 'content': [{'text': user_text}]}],\n            system=[{'text': system_prompt}],\n            inferenceConfig={'maxTokens': 100, 'temperature': 0.8, 'topP': 0.9}\n        )\n        print(f'Bedrock response: {bedrock_response}')\n        \n        assistant_text = bedrock_response['output']['message']['content'][0]['text']\n        print(f'Assistant text: {assistant_text}')\n        \n        print('Calling Polly...')\n        polly_response = polly_client.synthesize_speech(\n            Text=assistant_text,\n            OutputFormat='mp3',\n            VoiceId='Camila',\n            Engine='neural'\n        )\n        print('Polly response received')\n        \n        audio_data = polly_response['AudioStream'].read()\n        audio_base64 = base64.b64encode(audio_data).decode('utf-8')\n        print(f'Audio encoded, length: {len(audio_base64)}')\n        \n        return {\n            'statusCode': 200,\n            'headers': cors_headers,\n            'body': json.dumps({'text': assistant_text, 'audio': audio_base64})\n        }\n        \n    except Exception as e:\n        error_msg = f'Error: {str(e)}\\nTraceback: {traceback.format_exc()}'\n        print(error_msg)\n        return {\n            'statusCode': 500,\n            'headers': cors_headers,\n            'body': json.dumps({'error': str(e), 'traceback': traceback.format_exc()})\n        }\n"
+        }
+      }
+    },
+    "ProfessoraElisaAPI": {
+      "Type": "AWS::ApiGateway::RestApi",
+      "Properties": {
+        "Name": "ProfessoraElisaAPI",
+        "Description": "API REST para Professora Elisa Speech-to-Speech",
+        "EndpointConfiguration": {
+          "Types": [
+            "REGIONAL"
+          ]
+        }
+      }
+    },
+    "ChatResource": {
+      "Type": "AWS::ApiGateway::Resource",
+      "Properties": {
+        "RestApiId": {
+          "Ref": "ProfessoraElisaAPI"
+        },
+        "ParentId": {
+          "Fn::GetAtt": [
+            "ProfessoraElisaAPI",
+            "RootResourceId"
+          ]
+        },
+        "PathPart": "chat"
+      }
+    },
+    "ChatMethodPOST": {
+      "Type": "AWS::ApiGateway::Method",
+      "Properties": {
+        "RestApiId": {
+          "Ref": "ProfessoraElisaAPI"
+        },
+        "ResourceId": {
+          "Ref": "ChatResource"
+        },
+        "HttpMethod": "POST",
+        "AuthorizationType": "NONE",
+        "Integration": {
+          "Type": "AWS_PROXY",
+          "IntegrationHttpMethod": "POST",
+          "Uri": {
+            "Fn::Sub": "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ProfessoraElisaFunction.Arn}/invocations"
+          }
+        },
+        "MethodResponses": [
+          {
+            "StatusCode": "200",
+            "ResponseParameters": {
+              "method.response.header.Access-Control-Allow-Origin": true
+            }
+          }
+        ]
+      }
+    },
+    "ChatMethodOPTIONS": {
+      "Type": "AWS::ApiGateway::Method",
+      "Properties": {
+        "RestApiId": {
+          "Ref": "ProfessoraElisaAPI"
+        },
+        "ResourceId": {
+          "Ref": "ChatResource"
+        },
+        "HttpMethod": "OPTIONS",
+        "AuthorizationType": "NONE",
+        "Integration": {
+          "Type": "MOCK",
+          "IntegrationResponses": [
+            {
+              "StatusCode": "200",
+              "ResponseParameters": {
+                "method.response.header.Access-Control-Allow-Headers": "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'",
+                "method.response.header.Access-Control-Allow-Methods": "'POST,OPTIONS'",
+                "method.response.header.Access-Control-Allow-Origin": "'*'"
+              },
+              "ResponseTemplates": {
+                "application/json": ""
+              }
+            }
+          ],
+          "RequestTemplates": {
+            "application/json": "{\"statusCode\": 200}"
+          }
+        },
+        "MethodResponses": [
+          {
+            "StatusCode": "200",
+            "ResponseParameters": {
+              "method.response.header.Access-Control-Allow-Headers": true,
+              "method.response.header.Access-Control-Allow-Methods": true,
+              "method.response.header.Access-Control-Allow-Origin": true
+            }
+          }
+        ]
+      }
+    },
+    "LambdaInvokePermission": {
+      "Type": "AWS::Lambda::Permission",
+      "Properties": {
+        "FunctionName": {
+          "Ref": "ProfessoraElisaFunction"
+        },
+        "Action": "lambda:InvokeFunction",
+        "Principal": "apigateway.amazonaws.com",
+        "SourceArn": {
+          "Fn::Sub": "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ProfessoraElisaAPI}/*/*/*"
+        }
+      }
+    },
+    "APIDeployment": {
+      "Type": "AWS::ApiGateway::Deployment",
+      "DependsOn": [
+        "ChatMethodPOST",
+        "ChatMethodOPTIONS"
+      ],
+      "Properties": {
+        "RestApiId": {
+          "Ref": "ProfessoraElisaAPI"
+        },
+        "StageName": "prod"
+      }
+    }
+  },
+  "Outputs": {
+    "APIEndpoint": {
+      "Description": "URL do endpoint da API para usar no app_aws.py",
+      "Value": {
+        "Fn::Sub": "https://${ProfessoraElisaAPI}.execute-api.${AWS::Region}.amazonaws.com/prod/chat"
+      }
+    },
+    "LambdaFunctionArn": {
+      "Description": "ARN da função Lambda",
+      "Value": {
+        "Fn::GetAtt": [
+          "ProfessoraElisaFunction",
+          "Arn"
+        ]
+      }
+    },
+    "LambdaRoleArn": {
+      "Description": "ARN da role IAM da Lambda",
+      "Value": {
+        "Fn::GetAtt": [
+          "LambdaExecutionRole",
+          "Arn"
+        ]
+      }
+    }
+  }
+}

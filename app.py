@@ -1,29 +1,5 @@
 import streamlit as st
 import streamlit.components.v1 as components
-import subprocess
-import time
-import socket
-import sys
-import os
-
-# Iniciar backend automaticamente
-@st.cache_resource
-def start_backend():
-    # Verificar se backend já está rodando
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    result = sock.connect_ex(('localhost', 8001))
-    sock.close()
-    
-    if result == 0:
-        return None  # Backend já está rodando
-    
-    # Iniciar backend
-    backend_path = os.path.join(os.path.dirname(__file__), "backend.py")
-    backend_process = subprocess.Popen([sys.executable, backend_path])
-    time.sleep(3)
-    return backend_process
-
-start_backend()
 
 st.set_page_config(page_title="Professora Elisa!", page_icon="🙋🏼‍♀️", layout="centered")
 
@@ -42,14 +18,17 @@ st.markdown("""
 
 st.markdown('<div class="main-header"><h1>🙋🏼‍♀️ Professora Elisa!</h1><p>Conversa em Tempo Real - Speech-to-Speech</p></div>', unsafe_allow_html=True)
 
-html_code = """
+# API Gateway endpoint gerado pelo CloudFormation
+API_ENDPOINT = "https://fgtailjin9.execute-api.us-east-1.amazonaws.com/prod/chat"
+
+html_code = f"""
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        body {{
             font-family: 'Segoe UI', sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
@@ -57,8 +36,8 @@ html_code = """
             align-items: center;
             justify-content: center;
             padding: 20px;
-        }
-        .container {
+        }}
+        .container {{
             background: white;
             border-radius: 30px;
             padding: 50px;
@@ -66,8 +45,8 @@ html_code = """
             text-align: center;
             max-width: 500px;
             width: 100%;
-        }
-        #connectButton {
+        }}
+        #talkButton {{
             width: 200px;
             height: 200px;
             border-radius: 50%;
@@ -79,114 +58,50 @@ html_code = """
             transition: all 0.3s;
             box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
             margin: 20px auto;
-        }
-        #connectButton:hover {
+        }}
+        #talkButton:hover {{
             transform: scale(1.05);
-        }
-        #connectButton.connected {
+        }}
+        #talkButton.listening {{
             background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%);
-            animation: pulse 2s infinite;
-        }
-        #connectButton.speaking {
+            animation: pulse 1s infinite;
+        }}
+        #talkButton.speaking {{
             background: linear-gradient(135deg, #6bcf7f 0%, #48bb78 100%);
             animation: pulse 1s infinite;
-        }
-        @keyframes pulse {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.05); }
-        }
-        #status {
+        }}
+        @keyframes pulse {{
+            0%, 100% {{ transform: scale(1); }}
+            50% {{ transform: scale(1.05); }}
+        }}
+        #status {{
             margin-top: 30px;
             font-size: 22px;
             font-weight: bold;
             color: #333;
-        }
+        }}
     </style>
 </head>
 <body>
     <div class="container">
-        <button id="connectButton" onclick="toggleConnection()">🎤</button>
-        <div id="status">Clique para conectar</div>
+        <button id="talkButton">🎤</button>
+        <div id="status">Pressione ESPAÇO para falar</div>
     </div>
 
     <script>
-        let ws;
-        let isConnected = false;
+        const API_URL = '{API_ENDPOINT}';
         let currentAudio = null;
+        let isProcessing = false;
         
-        const button = document.getElementById('connectButton');
+        const button = document.getElementById('talkButton');
         const status = document.getElementById('status');
         
-        async function toggleConnection() {
-            if (!isConnected) {
-                await connect();
-            } else {
-                disconnect();
-            }
-        }
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         
-        async function connect() {
-            try {
-                ws = new WebSocket('ws://localhost:8001/ws');
-                
-                ws.onopen = async () => {
-                    console.log('WebSocket conectado');
-                    isConnected = true;
-                    button.className = 'connected';
-                    button.innerHTML = '🔴';
-                    status.textContent = '🎙️ Pressione ESPAÇO para falar';
-                    
-                    await startAudioCapture();
-                };
-                
-                ws.onmessage = (event) => {
-                    console.log('Áudio recebido');
-                    playAudio(event.data);
-                };
-                
-                ws.onerror = (error) => {
-                    console.error('Erro WebSocket:', error);
-                    status.textContent = '❌ Erro na conexão';
-                };
-                
-                ws.onclose = () => {
-                    console.log('WebSocket fechado');
-                    if (isConnected) {
-                        status.textContent = '❌ Conexão perdida. Clique para reconectar';
-                        isConnected = false;
-                        button.className = '';
-                        button.innerHTML = '🎤';
-                    }
-                };
-                
-            } catch (err) {
-                status.textContent = '❌ Erro: ' + err.message;
-            }
-        }
-        
-        function disconnect() {
-            if (ws) {
-                ws.close();
-            }
-            if (currentAudio) {
-                currentAudio.pause();
-                currentAudio.currentTime = 0;
-                currentAudio = null;
-            }
-            
-            isConnected = false;
-            button.className = '';
-            button.innerHTML = '🎤';
-            status.textContent = 'Desconectado';
-        }
-        
-        async function startAudioCapture() {
-            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-            if (!SpeechRecognition) {
-                status.textContent = '❌ Use Chrome ou Edge';
-                return;
-            }
-            
+        if (!SpeechRecognition) {{
+            status.textContent = '❌ Use Chrome ou Edge';
+            button.disabled = true;
+        }} else {{
             const recognition = new SpeechRecognition();
             recognition.lang = 'pt-BR';
             recognition.continuous = false;
@@ -194,80 +109,118 @@ html_code = """
             
             let isRecognizing = false;
             
-            document.addEventListener('keydown', (e) => {
-                if (e.code === 'Space' && !isRecognizing && isConnected) {
+            document.addEventListener('keydown', (e) => {{
+                if (e.code === 'Space' && !isRecognizing && !isProcessing) {{
                     e.preventDefault();
                     isRecognizing = true;
                     recognition.start();
+                    button.className = 'listening';
+                    button.innerHTML = '🔴';
                     status.textContent = '🔴 Ouvindo... Solte ESPAÇO';
-                }
-            });
+                }}
+            }});
             
-            document.addEventListener('keyup', (e) => {
-                if (e.code === 'Space' && isRecognizing) {
+            document.addEventListener('keyup', (e) => {{
+                if (e.code === 'Space' && isRecognizing) {{
                     e.preventDefault();
                     recognition.stop();
-                }
-            });
+                }}
+            }});
             
-            recognition.onresult = (event) => {
+            recognition.onresult = async (event) => {{
                 const transcript = event.results[0][0].transcript;
                 console.log('Você disse:', transcript);
                 
-                if (ws && ws.readyState === WebSocket.OPEN) {
-                    ws.send(JSON.stringify({ text: transcript }));
-                    status.textContent = '⏳ Aguardando resposta...';
-                }
-            };
+                button.className = '';
+                button.innerHTML = '⏳';
+                status.textContent = '⏳ Aguardando resposta...';
+                isProcessing = true;
+                
+                try {{
+                    const response = await fetch(API_URL, {{
+                        method: 'POST',
+                        headers: {{
+                            'Content-Type': 'application/json',
+                        }},
+                        body: JSON.stringify({{ text: transcript }})
+                    }});
+                    
+                    if (!response.ok) {{
+                        throw new Error('Erro na API: ' + response.status);
+                    }}
+                    
+                    const data = await response.json();
+                    console.log('Resposta:', data.text);
+                    
+                    // Decode base64 audio
+                    const audioBytes = Uint8Array.from(atob(data.audio), c => c.charCodeAt(0));
+                    const audioBlob = new Blob([audioBytes], {{ type: 'audio/mpeg' }});
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    
+                    playAudio(audioUrl);
+                    
+                }} catch (error) {{
+                    console.error('Erro:', error);
+                    status.textContent = '❌ Erro: ' + error.message;
+                    button.className = '';
+                    button.innerHTML = '🎤';
+                    isProcessing = false;
+                }}
+            }};
             
-            recognition.onend = () => {
+            recognition.onend = () => {{
                 isRecognizing = false;
-            };
+            }};
             
-            recognition.onerror = (event) => {
+            recognition.onerror = (event) => {{
                 console.error('Erro reconhecimento:', event.error);
                 isRecognizing = false;
-                if (isConnected) {
-                    if (event.error === 'no-speech') {
+                
+                if (!isProcessing) {{
+                    if (event.error === 'no-speech') {{
                         status.textContent = '⚠️ Não ouvi nada. Tente novamente';
-                    } else if (event.error === 'aborted') {
+                    }} else if (event.error === 'aborted') {{
                         status.textContent = '🎙️ Pressione ESPAÇO para falar';
-                    } else {
+                    }} else {{
                         status.textContent = '🎙️ Pressione ESPAÇO para falar';
-                    }
-                }
-            };
-        }
+                    }}
+                    button.className = '';
+                    button.innerHTML = '🎤';
+                }}
+            }};
+        }}
         
-        function playAudio(audioData) {
-            if (!isConnected) return;
-            
-            if (currentAudio) {
+        function playAudio(audioUrl) {{
+            if (currentAudio) {{
                 currentAudio.pause();
                 currentAudio = null;
-            }
+            }}
             
             button.className = 'speaking';
             button.innerHTML = '🔊';
             status.textContent = '🔊 Professora falando...';
             
-            const audioBlob = new Blob([audioData], { type: 'audio/mpeg' });
-            const audioUrl = URL.createObjectURL(audioBlob);
             currentAudio = new Audio(audioUrl);
             currentAudio.volume = 1.0;
-            
             currentAudio.play();
             
-            currentAudio.onended = () => {
+            currentAudio.onended = () => {{
                 URL.revokeObjectURL(audioUrl);
                 currentAudio = null;
-                if (isConnected) {
-                    button.className = 'connected';
-                    button.innerHTML = '🔴';
-                    status.textContent = '🎙️ Pressione ESPAÇO para falar';
-                }
-            };
-        }
+                button.className = '';
+                button.innerHTML = '🎤';
+                status.textContent = '🎙️ Pressione ESPAÇO para falar';
+                isProcessing = false;
+            }};
+            
+            currentAudio.onerror = () => {{
+                console.error('Erro ao reproduzir áudio');
+                status.textContent = '❌ Erro ao reproduzir áudio';
+                button.className = '';
+                button.innerHTML = '🎤';
+                isProcessing = false;
+            }};
+        }}
     </script>
 </body>
 </html>
