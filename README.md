@@ -1,4 +1,4 @@
-# 🙋🏼 Professora Elisa - Speech-to-Speech English Learning Assistant
+# 🙋🏼‍♀️ Professora Elisa - Speech-to-Speech English Learning Assistant
 
 Assistente de conversação em tempo real para aprendizado de inglês, usando reconhecimento de voz no navegador, IA generativa (Amazon Bedrock Nova Pro) e síntese de voz (Amazon Polly).
 
